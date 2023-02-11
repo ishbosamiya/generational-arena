@@ -493,6 +493,23 @@ impl<T> Arena<T> {
             .expect("inserting will always succeed after reserving additional space")
     }
 
+    /// Slow path of [`Self::insert_with_res()`]. When the insertion
+    /// requires additional capacity.
+    #[inline(never)]
+    fn insert_with_res_slow_path<E>(
+        &mut self,
+        create: impl FnOnce(Index) -> Result<T, E>,
+    ) -> Result<Index, E> {
+        let len = self.items.len();
+        self.reserve(len);
+        self.try_insert_with_res(create).map_err(|err| match err {
+            TryInsertWithResError::InsertionFail(_) => {
+                unreachable!("inserting will always succeed after reserving additional space")
+            }
+            TryInsertWithResError::CreationFail(err) => err,
+        })
+    }
+
     /// Attempts to insert the value returned by `create` if [`Ok`]
     /// into the arena using existing capacity. `create` is called
     /// with the new value's associated index, allowing values to know
@@ -535,6 +552,33 @@ impl<T> Arena<T> {
             index: i,
             generation: self.generation,
         })
+    }
+
+    /// Insert the value returned by `create` into the area if [`Ok`],
+    /// allocating more capacity if necessary. `create` is called with
+    /// the new value's associated index, allowing values that know
+    /// their own index and potentially fail when creating the new
+    /// value.
+    ///
+    /// If `create` returns [`Err`], the error is propagated back to
+    /// the caller.
+    ///
+    /// Use [`Self::insert_with()`] when creation of the new value of
+    /// type `T` cannot fail.
+    ///
+    /// TODO: examples
+    #[inline]
+    pub fn insert_with_res<E>(
+        &mut self,
+        create: impl FnOnce(Index) -> Result<T, E>,
+    ) -> Result<Index, E> {
+        match self.try_insert_with_res(create) {
+            Ok(i) => Ok(i),
+            Err(TryInsertWithResError::InsertionFail(create)) => {
+                self.insert_with_res_slow_path(create)
+            }
+            Err(TryInsertWithResError::CreationFail(err)) => Err(err),
+        }
     }
 
     /// Remove the element at index `i` from the arena.
