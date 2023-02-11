@@ -566,7 +566,23 @@ impl<T> Arena<T> {
     /// Use [`Self::insert_with()`] when creation of the new value of
     /// type `T` cannot fail.
     ///
-    /// TODO: examples
+    /// # Examples
+    ///
+    /// ```
+    /// use generational_arena::{Arena, Index};
+    ///
+    /// #[derive(Debug, PartialEq, Eq)]
+    /// struct Error;
+    ///
+    /// let mut arena = Arena::new();
+    ///
+    /// let idx = arena.insert_with_res::<Error>(|idx| Ok((42, idx))).unwrap();
+    /// assert_eq!(arena[idx].0, 42);
+    /// assert_eq!(arena[idx].1, idx);
+    ///
+    /// let res = arena.insert_with_res(|idx| Err(Error));
+    /// assert_eq!(res, Err(Error));
+    /// ```
     #[inline]
     pub fn insert_with_res<E>(
         &mut self,
