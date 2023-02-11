@@ -493,6 +493,50 @@ impl<T> Arena<T> {
             .expect("inserting will always succeed after reserving additional space")
     }
 
+    /// Attempts to insert the value returned by `create` if [`Ok`]
+    /// into the arena using existing capacity. `create` is called
+    /// with the new value's associated index, allowing values to know
+    /// their own index.
+    ///
+    /// This method will never allocate new capacity in the arena.
+    ///
+    /// If insertion succeeds, then the new index is returned. If
+    /// insertion fails, then [`Err`]\([`TryInsertWithResError`]\).
+    ///
+    /// [`TryInsertWithResError::InsertionFail`] indicates that the
+    /// arena didn't have sufficient capacity to add another element.
+    ///
+    /// [`TryInsertWithResError::CreationFail`] indicates that
+    /// `create` failed.
+    ///
+    /// TODO: example
+    #[inline]
+    pub fn try_insert_with_res<F: FnOnce(Index) -> Result<T, E>, E>(
+        &mut self,
+        create: F,
+    ) -> Result<Index, TryInsertWithResError<F, T, E>> {
+        match self.try_next_index() {
+            Some(index) => Ok(self
+                .try_insert(create(index).map_err(|err| TryInsertWithResError::CreationFail(err))?)
+                .map_err(|_| ())
+                .expect("insertion cannot fail since there is enough capacity")),
+            None => Err(TryInsertWithResError::InsertionFail(create)),
+        }
+    }
+
+    /// Try to get the index of the element that will be inserted
+    /// next. This does not actually allocate the index.
+    ///
+    /// To try to allocate the next index, see
+    /// [`Self::try_alloc_next_index()`].
+    #[inline]
+    fn try_next_index(&self) -> Option<Index> {
+        self.free_list_head.map(|i| Index {
+            index: i,
+            generation: self.generation,
+        })
+    }
+
     /// Remove the element at index `i` from the arena.
     ///
     /// If the element at index `i` is still in the arena, then it is
@@ -1364,4 +1408,14 @@ impl<T> ops::IndexMut<Index> for Arena<T> {
     fn index_mut(&mut self, index: Index) -> &mut Self::Output {
         self.get_mut(index).expect("No element at index")
     }
+}
+
+/// Error that might occur in [`Arena::try_insert_with_res()`].
+#[derive(Debug)]
+pub enum TryInsertWithResError<F: FnOnce(Index) -> Result<T, E>, T, E> {
+    /// Could not insert into the [`Arena`] since existing capacity
+    /// could not accommodate another value.
+    InsertionFail(F),
+    /// Creation of the value of type `T` failed.
+    CreationFail(E),
 }
