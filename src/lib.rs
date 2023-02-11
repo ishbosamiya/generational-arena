@@ -526,7 +526,29 @@ impl<T> Arena<T> {
     /// [`TryInsertWithResError::CreationFail`] indicates that
     /// `create` failed.
     ///
-    /// TODO: example
+    /// # Examples
+    ///
+    /// ```
+    /// use generational_arena::{Arena, Index, TryInsertWithResError};
+    ///
+    /// #[derive(Debug, PartialEq, Eq)]
+    /// struct Error;
+    ///
+    /// let mut arena = Arena::new();
+    ///
+    /// let idx = arena.try_insert_with_res::<_, Error>(|idx| Ok((42, idx)))
+    ///     .map_err(|_| ())
+    ///     .unwrap();
+    /// assert_eq!(arena[idx].0, 42);
+    /// assert_eq!(arena[idx].1, idx);
+    ///
+    /// match arena.try_insert_with_res::<_, Error>(|idx| Err(Error)) {
+    ///     Err(TryInsertWithResError::CreationFail(err)) => {
+    ///         assert_eq!(err, Error);
+    ///     },
+    ///     _ => unreachable!()
+    /// }
+    /// ```
     #[inline]
     pub fn try_insert_with_res<F: FnOnce(Index) -> Result<T, E>, E>(
         &mut self,
